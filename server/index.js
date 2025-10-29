@@ -1,65 +1,39 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
-const cors = require('cors');
 const { Server } = require('socket.io');
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app);
 app.use(cors());
 
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
     methods: ['GET', 'POST']
   }
 });
 
-let userSockets = new Map();     // username -> socket.id
-let onlineUsers = new Map();     // socket.id -> username
-
 io.on('connection', (socket) => {
-  console.log(`🔌 Connected: ${socket.id}`);
+  console.log('User connected:', socket.id);
 
-  // ✅ This is where 'socket' is defined — keep all socket.on(...) inside here
-
-  socket.on('register', (username) => {
-    userSockets.set(username, socket.id);
-    onlineUsers.set(socket.id, username);
-    io.emit('onlineUsers', Array.from(userSockets.keys()));
-  });
-
-  socket.on('privateMessage', ({ to, from, message }) => {
-    const targetSocketId = userSockets.get(to);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('privateMessage', {
-        from,
-        message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  socket.on('message', (data) => {
-    io.emit('message', {
-      username: data.username,
-      message: data.message,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.on('typing', (username) => {
-    socket.broadcast.emit('typing', username);
+  socket.on('send_message', (data) => {
+    io.emit('receive_message', data);
   });
 
   socket.on('disconnect', () => {
-    const username = onlineUsers.get(socket.id);
-    userSockets.delete(username);
-    onlineUsers.delete(socket.id);
-    io.emit('onlineUsers', Array.from(userSockets.keys()));
-    console.log(`❌ Disconnected: ${socket.id}`);
+    console.log('User disconnected:', socket.id);
   });
 });
 
-server.listen(5000, () => {
-  console.log('🚀 Server running on http://localhost:5000');
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+app.use(cors({
+  origin: 'http://localhost:3000', // allow requests from React frontend
+  methods: ['GET', 'POST'],
+}));
